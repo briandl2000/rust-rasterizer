@@ -17,4 +17,13 @@ impl Vertex {
             color
         }
     }
+
+    // pub fn lerp(v1: Self, v2: Self, t: f32) -> self
+    // {
+    //     Self {
+    //         pos: glam::vec4(pos.x, pos.y, pos.z, 1.),
+    //         uv,
+    //         color
+    //     }
+    // }
 }

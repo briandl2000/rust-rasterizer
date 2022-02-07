@@ -84,34 +84,34 @@ fn main() {
         y += 0.012;
         z += 0.004;
 
-        if !window.is_key_down(Key::Up)
-        {
-            rx -= 0.05;
-        }
-        if !window.is_key_down(Key::Down)
+        if window.is_key_down(Key::Up)
         {
             rx += 0.05;
         }
-
-        if !window.is_key_down(Key::Left)
+        if window.is_key_down(Key::Down)
         {
-            ry -= 0.05;
+            rx -= 0.05;
         }
-        if !window.is_key_down(Key::Right)
+
+        if window.is_key_down(Key::Left)
         {
             ry += 0.05;
+        }
+        if window.is_key_down(Key::Right)
+        {
+            ry -= 0.05;
         }
 
         let mut dir: Vec4 = glam::vec4(0., 0., 0., 0.);
 
-        dir.z += !window.is_key_down(Key::W)as i32 as f32;
-        dir.z -= !window.is_key_down(Key::S)as i32 as f32;
+        dir.z -= window.is_key_down(Key::W)as i32 as f32;
+        dir.z += window.is_key_down(Key::S)as i32 as f32;
     
-        dir.x += !window.is_key_down(Key::A)as i32 as f32;
-        dir.x -= !window.is_key_down(Key::D) as i32 as f32;
+        dir.x -= window.is_key_down(Key::A)as i32 as f32;
+        dir.x += window.is_key_down(Key::D) as i32 as f32;
 
-        dir.y -= !window.is_key_down(Key::Space)as i32 as f32;
-        dir.y +=!window.is_key_down(Key::LeftShift)as i32 as f32;
+        dir.y += window.is_key_down(Key::Space)as i32 as f32;
+        dir.y -= window.is_key_down(Key::LeftShift)as i32 as f32;
 
         let cam_rotation = Mat4::from_rotation_y(ry) * Mat4::from_rotation_x(rx) * Mat4::from_rotation_z(rz);
         dir = cam_rotation * dir;
@@ -127,7 +127,7 @@ fn main() {
         let scale = Mat4::from_scale(glam::vec3(1., 1., 1.));
         let mut model_matrix = translation * rotation * scale;
         
-        let projection_matrix =  Mat4::perspective_rh(std::f32::consts::PI/2., WIDTH as f32/HEIGHT as f32, 0.01, 1000.);
+        let projection_matrix =  Mat4::perspective_rh(std::f32::consts::PI/2., WIDTH as f32/HEIGHT as f32, 0.01, 100.);
         let mut mvp_matrix = projection_matrix* camera_matrix.inverse() * model_matrix;
 
         renderer.clear();

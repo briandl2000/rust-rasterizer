@@ -11,5 +11,5 @@ pub fn to_argb8(a: u8, r: u8, g: u8, b: u8) -> u32
 
 pub fn coords_to_index(x: usize, y: usize, width: usize) -> usize
 {
-    x+y*width
+    x+y*(width)
 }
