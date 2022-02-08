@@ -12,9 +12,9 @@ pub struct Renderer {
     width: usize,
     height: usize,
     screen_transform: Mat4,
-    pub texture: Texture
-}
+    pub texture: Texture,
 
+}
 
 impl Renderer {
     pub fn create(width: usize, height: usize) -> Self {
@@ -30,7 +30,7 @@ impl Renderer {
             depth_buffer: vec![std::f32::INFINITY; width * height],
             scan_line_buffer: vec![(0, glam::vec3(0., 0., 0.)); height * 2],
             width,
-             height,
+            height,
             screen_transform: transformation_matrix,
             texture: Texture::load(Path::new("bojan.jpg"))
         }
@@ -52,15 +52,21 @@ impl Renderer {
         let y_prestep = y_start as f32 - min_y_vert.y;
         let mut current_x = min_y_vert.x + y_prestep * x_step;
         for j in y_start..y_end {
-            self.scan_line_buffer[j as usize * 2 + which_side] = 
-                (current_x.ceil() as i32,
-                bary_centric_locations[vertex_0_index].lerp(bary_centric_locations[vertex_1_index], ((j as f32)-min_y_vert.y)/y_dist));
-            current_x += x_step;
+            if j >= 0 && j < self.height as i32
+            {
+                self.scan_line_buffer[j as usize * 2 + which_side] = 
+                    (current_x.round() as i32,
+                    bary_centric_locations[vertex_0_index].lerp(bary_centric_locations[vertex_1_index], ((j as f32)-min_y_vert.y)/y_dist));
+                current_x += x_step;
+            }
         }
         
     }
 
     fn fill_shape(&mut self, y_start: u32, y_end: u32, vertices: [Vertex; 3]) {
+        
+
+        let one_over_w = 1./glam::vec3(vertices[0].pos.w, vertices[1].pos.w, vertices[2].pos.w);
         for y in y_start..y_end {
             if y >= self.height as u32
             {
@@ -75,32 +81,34 @@ impl Renderer {
             let mut lerp: f32 = 0.;
             for x in start_x.0..end_x.0 {
                 
-                let one_over_w = 1./glam::vec3(vertices[0].pos.w, vertices[1].pos.w, vertices[2].pos.w);
-                
                 let mut barycentric_coord = start_x.1.lerp(end_x.1, lerp);
+
                 barycentric_coord =  (barycentric_coord*one_over_w) / (barycentric_coord.dot(one_over_w));
                 
                 lerp += step_x;
-
                 let index: usize = (x as usize)+(y as usize * self.width);
-                
-                let w = vertices[0].pos.w * barycentric_coord.x + vertices[1].pos.w * barycentric_coord.y + vertices[2].pos.w * barycentric_coord.z;
-            
-                let depth = (vertices[0].pos.z * barycentric_coord.x + vertices[1].pos.z * barycentric_coord.y + vertices[2].pos.z * barycentric_coord.z)/w;
+                if index < self.width * self.height
+                {    
+                    
+                    let depth = (vertices[0].pos.z) * barycentric_coord.x + 
+                                    (vertices[1].pos.z) * barycentric_coord.y + 
+                                    (vertices[2].pos.z) * barycentric_coord.z;
 
-                if self.depth_buffer[index] < depth {
-                    continue;
+                    if self.depth_buffer[index] < depth {
+                        continue;
+                    }
+
+                    let uv = vertices[0].uv * barycentric_coord.x +
+                                vertices[1].uv * barycentric_coord.y + 
+                                vertices[2].uv * barycentric_coord.z;
+                    //let color = vertices[0].color * barycentric_coord.x + vertices[1].color * barycentric_coord.y + vertices[2].color * barycentric_coord.z;
+
+                    //self.pixel_buffer[index] = to_argb8(255, ( barycentric_coord.x*255.) as u8, ( barycentric_coord.y*255.) as u8, ( barycentric_coord.z*255.) as u8);
+                    //self.pixel_buffer[index] = to_argb8(255, ( depth*255.) as u8, ( depth*255.) as u8, ( depth*255.) as u8);
+                    self.pixel_buffer[index] = self.texture.argb_at_uv(uv.x, uv.y);
+                    //self.pixel_buffer[index] = self.c;
+                    self.depth_buffer[index] = depth;
                 }
-
-                let uv = vertices[0].uv * barycentric_coord.x +
-                         vertices[1].uv * barycentric_coord.y + 
-                         vertices[2].uv * barycentric_coord.z;
-                //let color = vertices[0].color * barycentric_coord.x + vertices[1].color * barycentric_coord.y + vertices[2].color * barycentric_coord.z;
-
-                //self.pixel_buffer[index] = to_argb8(255, (depth*255.) as u8, (depth*255.) as u8, (depth*255.) as u8);
-                self.pixel_buffer[index] = self.texture.argb_at_uv(uv.x, uv.y);
-
-                self.depth_buffer[index] = depth;
             }
         }
     }
@@ -120,7 +128,8 @@ impl Renderer {
 
         if (transformed_mid.0.x - transformed_min.0.x) * (transformed_max.0.y-transformed_min.0.y) - (transformed_mid.0.y - transformed_min.0.y) * (transformed_max.0.x-transformed_min.0.x) < 0.
         {
-            return;
+            //return;
+            
         }
         
         if transformed_max.0.y < transformed_mid.0.y {
@@ -146,34 +155,74 @@ impl Renderer {
         self.fill_shape(transformed_min.0.y.ceil() as u32, transformed_max.0.y.ceil() as u32, [v0, v1, v2]);
     }
 
+    fn clip_polygon_axis(vertices: &mut Vec<Vertex>, auxillary_list: &mut Vec<Vertex>, component_index: usize) -> bool{
+        Self::clip_polygon_component(vertices, component_index, 1.0, auxillary_list);
+        vertices.clear();
+
+        if auxillary_list.is_empty(){
+            return false;
+        }
+
+        Self::clip_polygon_component(auxillary_list, component_index, -1.0, vertices);
+        auxillary_list.clear();
+
+        !vertices.is_empty()
+    }
+
+    fn clip_polygon_component(vertices: &mut Vec<Vertex>, component_index: usize, component_factor: f32, result: &mut Vec<Vertex>){
+        let mut previous_vertex: Vertex = vertices[vertices.len() - 1];
+        let mut previous_component: f32 = previous_vertex.pos[component_index] * component_factor;
+        let mut previous_inside: bool = previous_component <= previous_vertex.pos.w;
+
+        for it in vertices.iter() {
+            let current_vertex = *it;
+            let current_component: f32 = current_vertex.pos[component_index] * component_factor;
+            let current_inside: bool = current_component <= current_vertex.pos.w;
+
+            if current_inside ^ previous_inside  {
+                let lerp_amt: f32 = (previous_vertex.pos.w - previous_component) /
+                                   ((previous_vertex.pos.w - previous_component) - 
+                                    (current_vertex.pos.w  - current_component));
+
+                result.push(Vertex::lerp(previous_vertex, current_vertex, lerp_amt));
+            }
+
+            if current_inside {
+                result.push(current_vertex);
+            }
+
+            previous_vertex = current_vertex;
+            previous_component = current_component;
+            previous_inside = current_inside;
+        }
+    }
+
     pub fn draw_triangle(&mut self, v0: Vertex, v1: Vertex, v2: Vertex) {
-        let triangles: Vec<(Vertex, Vertex, Vertex)> = vec![(v0, v1, v2); 1];
-        let vertices: Vec<Vertex> = Vec::new();
-        if v0.pos.x > v0.pos.w || v0.pos.x < -v0.pos.w ||
-           v0.pos.y > v0.pos.w || v0.pos.y < -v0.pos.w ||
-           v0.pos.z > v0.pos.w || v0.pos.z < 0.
-        {
-            return;
-        }
-        
-        if v1.pos.x > v1.pos.w || v1.pos.x < -v1.pos.w ||
-           v1.pos.y > v1.pos.w || v1.pos.y < -v1.pos.w ||
-           v1.pos.z > v1.pos.w || v1.pos.z < 0.
-        {
-            return;
+        let v0_inside = v0.is_inside_view_frustum();
+		let v1_inside = v1.is_inside_view_frustum();
+		let v2_inside = v2.is_inside_view_frustum();
+
+		if v0_inside && v1_inside && v2_inside {
+			self.rasterize_triangle(v0, v1, v2);
+			return;
         }
 
-        if v2.pos.x > v2.pos.w || v2.pos.x < -v2.pos.w ||
-           v2.pos.y > v2.pos.w || v2.pos.y < -v2.pos.w ||
-           v2.pos.z > v2.pos.w || v2.pos.z < 0.
-        {
-            return;
-        }
+		let mut vertices: Vec<Vertex> = Vec::new();
+		let mut auxillary_list: Vec<Vertex> = Vec::new();
+		
+		vertices.push(v0);
+		vertices.push(v1);
+		vertices.push(v2);
 
-        for i in triangles
-        {
-            self.rasterize_triangle(i.0, i.1, i.2);
-        }
+		if Self::clip_polygon_axis(&mut vertices, &mut auxillary_list, 0) &&
+           Self::clip_polygon_axis(&mut vertices, &mut auxillary_list, 1) &&
+		   Self::clip_polygon_axis(&mut vertices, &mut auxillary_list, 2) {
+			let initial_vertex: Vertex = vertices[0];
+
+			for i in 0..vertices.len()-1 {
+				self.rasterize_triangle(initial_vertex, vertices[i], vertices[i + 1]);
+			}
+		}
     }
 
     pub fn clear(&mut self) {
