@@ -3,8 +3,8 @@ use crate::utils::*;
 use crate::vertex::*;
 use crate::texture::*;
 
+use glam::Vec4Swizzles;
 use glam::{Vec3, Vec4, Mat4};
-use std::path::Path;
 pub struct Renderer {
     pub pixel_buffer: Vec<u32>,
     pub depth_buffer: Vec<f32>,
@@ -12,7 +12,10 @@ pub struct Renderer {
     width: usize,
     height: usize,
     screen_transform: Mat4,
-    pub texture: Texture,
+    pub textures: Vec<Texture>,
+    pub bound_texture: i32,
+    pub bound_normal_texture: i32,
+    pub texture_offset: i32
 }
 
 impl Renderer {
@@ -31,7 +34,10 @@ impl Renderer {
             width,
             height,
             screen_transform: transformation_matrix,
-            texture: Texture::load(Path::new("res/DamagedHelmet/Default_albedo.jpg"))
+            textures: vec![],
+            bound_texture: -1,
+            bound_normal_texture: -1,
+            texture_offset: 0
         }
     }
 
@@ -62,7 +68,7 @@ impl Renderer {
         
     }
 
-    fn fill_shape(&mut self, y_start: u32, y_end: u32, vertices: [Vertex; 3]) {
+    fn fill_shape(&mut self, y_start: u32, y_end: u32, vertices: [Vertex; 3], model_matrix: Mat4) {
         
 
         let one_over_w = 1./glam::vec3(vertices[0].pos.w, vertices[1].pos.w, vertices[2].pos.w);
@@ -97,24 +103,47 @@ impl Renderer {
                         continue;
                     }
 
-                    let uv = vertices[0].uv * barycentric_coord.x +
+                    let _uv = vertices[0].uv * barycentric_coord.x +
                                   vertices[1].uv * barycentric_coord.y + 
                                   vertices[2].uv * barycentric_coord.z;
 
-                    let normal= vertices[0].normal * barycentric_coord.x +
-                                     vertices[1].normal * barycentric_coord.y + 
-                                     vertices[2].normal * barycentric_coord.z;
+                    let mut _normal= vertices[0].normal * barycentric_coord.x +
+                                      vertices[1].normal * barycentric_coord.y + 
+                                      vertices[2].normal * barycentric_coord.z;
+                    if self.bound_normal_texture >= 0
+                    {
+                        let sampled_normal = to_vec3_color(self.textures[self.bound_normal_texture as usize].argb_at_uv(_uv.x, _uv.y)) *2.-1.;
+                        let tangent= vertices[0].tangent * barycentric_coord.x +
+                                                 vertices[1].tangent * barycentric_coord.y + 
+                                                 vertices[2].tangent * barycentric_coord.z;
+                        let bitangent = _normal.cross(tangent);
+
+                        let local_matrix = glam::mat3(tangent, bitangent, _normal);
+                        _normal = local_matrix * sampled_normal;
+                    }
+
+                    _normal = (model_matrix.transpose().inverse() * glam::vec4(_normal.x, _normal.y, _normal.z, 0.)).xyz().normalize();
                     //let color = vertices[0].color * barycentric_coord.x + vertices[1].color * barycentric_coord.y + vertices[2].color * barycentric_coord.z;
 
                     //self.pixel_buffer[index] = to_argb8(255, ( barycentric_coord.x*255.) as u8, ( barycentric_coord.y*255.) as u8, ( barycentric_coord.z*255.) as u8);
                     //self.pixel_buffer[index] = to_argb8(255, ( depth*255.) as u8, ( depth*255.) as u8, ( depth*255.) as u8);
                     //self.pixel_buffer[index] = to_argb8(255, ( uv.x*255.) as u8, ( uv.y*255.) as u8, ( 0.*255.) as u8);
                     //self.pixel_buffer[index] = from_vec3_to_argb8(normal);
-                    let mut color = to_vec3_color(self.texture.argb_at_uv(uv.x, uv.y));
-                    color *= glam::vec3(0., 1., 0.).dot(normal);
+                    let mut color: Vec3;
+                    if self.bound_texture >= 0
+                    {
+                        color = to_vec3_color(self.textures[self.bound_texture as usize].argb_at_uv(_uv.x, _uv.y));
+                    }
+                    else {
+                        color= vertices[0].color * barycentric_coord.x +
+                                        vertices[1].color * barycentric_coord.y + 
+                                        vertices[2].color * barycentric_coord.z;
+                    }
+                    color = 1.*color * glam::vec3(0., 1., 1.).normalize().dot(_normal).clamp(0., 1.) * 1. +
+                    color *0.2;
 
                     self.pixel_buffer[index] = from_vec3_to_argb8(color);
-
+                    //self.pixel_buffer[index] = from_vec3_to_argb8(glam::vec3(_uv.x, _uv.y, 0.));
                     self.depth_buffer[index] = depth;
                 }
             }
@@ -128,7 +157,7 @@ impl Renderer {
         self.scan_convert_line(mid_y_vert, max_y_vert, 1 - handedness, indices[1], indices[2]);
     }
 
-    fn rasterize_triangle(&mut self, v0: Vertex, v1: Vertex, v2: Vertex) {
+    fn rasterize_triangle(&mut self, v0: Vertex, v1: Vertex, v2: Vertex, model_matrix: Mat4) {
 
         let mut transformed_min =  (self.screen_transform * (v0.pos/v0.pos.w), 0_usize);
         let mut transformed_mid =  (self.screen_transform * (v1.pos/v1.pos.w), 1_usize);
@@ -159,7 +188,7 @@ impl Renderer {
         let handedness: usize = (area > 0.) as usize;
 
         self.scan_convert_triangle(transformed_min.0, transformed_mid.0, transformed_max.0, handedness, [transformed_min.1, transformed_mid.1, transformed_max.1]);
-        self.fill_shape(transformed_min.0.y.ceil() as u32, transformed_max.0.y.ceil() as u32, [v0, v1, v2]);
+        self.fill_shape(transformed_min.0.y.ceil() as u32, transformed_max.0.y.ceil() as u32, [v0, v1, v2], model_matrix);
     }
 
     fn clip_polygon_axis(vertices: &mut Vec<Vertex>, auxillary_list: &mut Vec<Vertex>, component_index: usize) -> bool{
@@ -204,16 +233,23 @@ impl Renderer {
         }
     }
 
-    pub fn draw_triangle(&mut self, v0: Vertex, v1: Vertex, v2: Vertex) {
+    pub fn draw_triangle(&mut self, v0: Vertex, v1: Vertex, v2: Vertex, model_matrix: Mat4) {
         let v0_inside = v0.is_inside_view_frustum();
 		let v1_inside = v1.is_inside_view_frustum();
 		let v2_inside = v2.is_inside_view_frustum();
 
-		if v0_inside && v1_inside && v2_inside {
-			self.rasterize_triangle(v0, v1, v2);
+		if v0_inside.0 && v1_inside.0 && v2_inside.0 {
+			self.rasterize_triangle(v0, v1, v2, model_matrix);
 			return;
         }
-
+		if !v0_inside.1 && !v1_inside.1 && !v2_inside.1 ||
+           !v0_inside.2 && !v1_inside.2 && !v2_inside.2 ||
+           !v0_inside.3 && !v1_inside.3 && !v2_inside.3 ||
+           !v0_inside.4 && !v1_inside.4 && !v2_inside.4 ||
+           !v0_inside.5 && !v1_inside.5 && !v2_inside.5 ||
+           !v0_inside.6 && !v1_inside.6 && !v2_inside.6 {
+            return;
+        }
 		let mut vertices: Vec<Vertex> = Vec::new();
 		let mut auxillary_list: Vec<Vertex> = Vec::new();
 		
@@ -227,7 +263,7 @@ impl Renderer {
 			let initial_vertex: Vertex = vertices[0];
 
 			for i in 0..vertices.len()-1 {
-				self.rasterize_triangle(initial_vertex, vertices[i], vertices[i + 1]);
+				self.rasterize_triangle(initial_vertex, vertices[i], vertices[i + 1], model_matrix);
 			}
 		}
     }
@@ -239,5 +275,9 @@ impl Renderer {
         for i in self.depth_buffer.iter_mut() {
             *i = std::f32::INFINITY;
         }
+    }
+
+    pub fn add_texture(&mut self, texture: Texture){
+        self.textures.push(texture);
     }
 }

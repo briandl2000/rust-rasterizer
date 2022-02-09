@@ -1,6 +1,4 @@
 
-use crate::transform::*;
-
 use glam::{Mat4, Vec3};
 
 pub struct Camera {
@@ -16,7 +14,7 @@ impl Default for Camera {
     fn default() -> Self {
         Self {
             near: 0.1,
-            far: 10.,
+            far: 100.,
             fov: f32::to_radians(45.),
             aspect_ratio: 1.0,
             translation: glam::vec3(0., 0., 0.),

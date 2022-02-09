@@ -44,4 +44,66 @@ impl Texture {
             to_argb8(255, 255, 0, 255)
         }
     }
+
+    pub fn create(data: Vec<u8>, width: u32, height: u32, num_chanels: i32) -> Self {
+
+        let data = match num_chanels {
+            1 => {
+                (0..data.len())
+                .map(|id| {
+                    to_argb8(
+                        255,
+                        data[id],
+                        0,
+                        0,
+                    )
+                })
+                .collect()
+            }
+            2 => {
+                (0..data.len() / 2)
+                .map(|id| {
+                    to_argb8(
+                        255,
+                        data[id * 2],
+                        data[id * 2 + 1],
+                        0,
+                    )
+                })
+                .collect()
+            }
+            3 => {
+                (0..data.len() / 3)
+                .map(|id| {
+                    to_argb8(
+                        255,
+                        data[id * 3],
+                        data[id * 3 + 1],
+                        data[id * 3 + 2],
+                    )
+                })
+                .collect()
+            }
+            4 => {
+                (0..data.len() / 4)
+                .map(|id| {
+                    to_argb8(
+                        data[id * 4 + 3],
+                        data[id * 4    ],
+                        data[id * 4 + 1],
+                        data[id * 4 + 2],
+                    )
+                })
+                .collect()
+            }
+            _ => panic!("Non suported number of chanels"),
+        };
+
+        Self {
+            width: width as usize,
+            height: height as usize,
+            data,
+            depth: num_chanels as usize
+        }
+    }
 }
