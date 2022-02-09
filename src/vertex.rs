@@ -6,15 +6,17 @@ pub struct Vertex
 {
     pub pos: Vec4,
     pub uv: Vec2,
-    pub color: Vec3
+    pub color: Vec3,
+    pub normal: Vec3
 }
 
 impl Vertex {
-    pub fn create(pos: Vec3, uv: Vec2, color: Vec3) -> Self {
+    pub fn create(pos: Vec3, uv: Vec2, color: Vec3, normal: Vec3) -> Self {
         Self {
             pos: glam::vec4(pos.x, pos.y, pos.z, 1.),
             uv,
-            color
+            color,
+            normal
         }
     }
 
@@ -23,7 +25,8 @@ impl Vertex {
         Self {
             pos: v1.pos.lerp(v2.pos, t),
             uv: v1.uv.lerp(v2.uv, t),
-            color: v1.color.lerp(v2.color, t)
+            color: v1.color.lerp(v2.color, t),
+            normal: v1.normal.lerp(v2.normal, t)
         }
     }
     pub fn is_inside_view_frustum(self) -> bool

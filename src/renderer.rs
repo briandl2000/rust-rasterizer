@@ -13,7 +13,6 @@ pub struct Renderer {
     height: usize,
     screen_transform: Mat4,
     pub texture: Texture,
-
 }
 
 impl Renderer {
@@ -32,7 +31,7 @@ impl Renderer {
             width,
             height,
             screen_transform: transformation_matrix,
-            texture: Texture::load(Path::new("bojan.jpg"))
+            texture: Texture::load(Path::new("res/DamagedHelmet/Default_albedo.jpg"))
         }
     }
 
@@ -90,7 +89,7 @@ impl Renderer {
                 if index < self.width * self.height
                 {    
                     
-                    let depth = (vertices[0].pos.z) * barycentric_coord.x + 
+                    let depth =(vertices[0].pos.z) * barycentric_coord.x + 
                                     (vertices[1].pos.z) * barycentric_coord.y + 
                                     (vertices[2].pos.z) * barycentric_coord.z;
 
@@ -99,14 +98,23 @@ impl Renderer {
                     }
 
                     let uv = vertices[0].uv * barycentric_coord.x +
-                                vertices[1].uv * barycentric_coord.y + 
-                                vertices[2].uv * barycentric_coord.z;
+                                  vertices[1].uv * barycentric_coord.y + 
+                                  vertices[2].uv * barycentric_coord.z;
+
+                    let normal= vertices[0].normal * barycentric_coord.x +
+                                     vertices[1].normal * barycentric_coord.y + 
+                                     vertices[2].normal * barycentric_coord.z;
                     //let color = vertices[0].color * barycentric_coord.x + vertices[1].color * barycentric_coord.y + vertices[2].color * barycentric_coord.z;
 
                     //self.pixel_buffer[index] = to_argb8(255, ( barycentric_coord.x*255.) as u8, ( barycentric_coord.y*255.) as u8, ( barycentric_coord.z*255.) as u8);
                     //self.pixel_buffer[index] = to_argb8(255, ( depth*255.) as u8, ( depth*255.) as u8, ( depth*255.) as u8);
-                    self.pixel_buffer[index] = self.texture.argb_at_uv(uv.x, uv.y);
-                    //self.pixel_buffer[index] = self.c;
+                    //self.pixel_buffer[index] = to_argb8(255, ( uv.x*255.) as u8, ( uv.y*255.) as u8, ( 0.*255.) as u8);
+                    //self.pixel_buffer[index] = from_vec3_to_argb8(normal);
+                    let mut color = to_vec3_color(self.texture.argb_at_uv(uv.x, uv.y));
+                    color *= glam::vec3(0., 1., 0.).dot(normal);
+
+                    self.pixel_buffer[index] = from_vec3_to_argb8(color);
+
                     self.depth_buffer[index] = depth;
                 }
             }
@@ -126,10 +134,9 @@ impl Renderer {
         let mut transformed_mid =  (self.screen_transform * (v1.pos/v1.pos.w), 1_usize);
         let mut transformed_max =  (self.screen_transform * (v2.pos/v2.pos.w), 2_usize);
 
-        if (transformed_mid.0.x - transformed_min.0.x) * (transformed_max.0.y-transformed_min.0.y) - (transformed_mid.0.y - transformed_min.0.y) * (transformed_max.0.x-transformed_min.0.x) < 0.
+        if (transformed_mid.0.x - transformed_min.0.x) * (transformed_max.0.y-transformed_min.0.y) - (transformed_mid.0.y - transformed_min.0.y) * (transformed_max.0.x-transformed_min.0.x) > 0.
         {
-            //return;
-            
+            return;
         }
         
         if transformed_max.0.y < transformed_mid.0.y {
@@ -182,7 +189,7 @@ impl Renderer {
             if current_inside ^ previous_inside  {
                 let lerp_amt: f32 = (previous_vertex.pos.w - previous_component) /
                                    ((previous_vertex.pos.w - previous_component) - 
-                                    (current_vertex.pos.w  - current_component));
+                                    (current_vertex.pos.w  - current_component ));
 
                 result.push(Vertex::lerp(previous_vertex, current_vertex, lerp_amt));
             }
@@ -227,7 +234,7 @@ impl Renderer {
 
     pub fn clear(&mut self) {
         for i in self.pixel_buffer.iter_mut() {
-            *i = 0;
+            *i = from_vec3_to_argb8(glam::vec3(0.2, 0.3, 0.8));
         }
         for i in self.depth_buffer.iter_mut() {
             *i = std::f32::INFINITY;
